@@ -629,15 +629,7 @@ setup_nzbget() {
     if id "$app_user" >/dev/null 2>&1; then
         task_pass "User account for $app_user already exists."
     else
-        useradd -r -m -U -s /usr/sbin/nologin -d "$app_lib_path"
-
-    # --- make NZBGet web UI listen on all interfaces ---
-    if grep -qE '^[# ]*ControlIP=' \"$app_lib_path/nzbget.conf\"; then
-        sed -Ei 's|^[# ]*ControlIP=.*|ControlIP=0.0.0.0|' \"$app_lib_path/nzbget.conf\"
-    else
-        echo 'ControlIP=0.0.0.0' >> \"$app_lib_path/nzbget.conf\"
-    fi
- "$app_user"
+        useradd -r -m -U -s /usr/sbin/nologin -d "$app_lib_path" "$app_user"
         check_result
     fi
 
@@ -671,6 +663,14 @@ setup_nzbget() {
         fi
     fi
     chown -R "$app_user:$app_group" "$app_lib_path"
+    
+    # --- make NZBGet web UI listen on all interfaces ---
+    if grep -qE '^[# ]*ControlIP=' "$app_lib_path/nzbget.conf"; then
+        sed -Ei 's|^[# ]*ControlIP=.*|ControlIP=0.0.0.0|' \
+            "$app_lib_path/nzbget.conf"
+    else
+        echo 'ControlIP=0.0.0.0' >> "$app_lib_path/nzbget.conf"
+    fi
 
     # -- systemd unit -------------------------------------------------------
     nzb_bin="$(command -v nzbget || echo /usr/bin/nzbget)"
