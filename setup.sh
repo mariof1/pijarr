@@ -4,7 +4,7 @@ clear
 ### SET GLOBAL VARIABLES ###
 
 TEMPDIR="/tmp/pijarr"
-APPLIST="jackett sonarr lidarr radarr readarr prowlarr bazarr qbittorrent-nox"
+APPLIST="jackett sonarr lidarr radarr readarr prowlarr bazarr qbittorrent-nox nzbget"
 
 # Set terminal global variable for colors if supported.
 if [ -t 1 ]; then
@@ -182,6 +182,7 @@ readarr_src_url="http://readarr.servarr.com/v1/update/develop/updatefile?os=linu
 sonarr_src_url="https://services.sonarr.tv/v1/download/main/latest?version=4&os=linux&arch=${SERVARR_ARCH}"
 bazarr_src_url="https://github.com/morpheus65535/bazarr/releases/latest/download/bazarr.zip"
 qbittorrent_nox_src_url="Not applicable. Installed via apt."
+nzbget_src_url="Installed via apt."
 
 check_sources() {
     task_info "Application Installation Source URLs"
@@ -264,11 +265,6 @@ pkg_remove() {
         fi
     done
 }
-
-pkg_purge() {
-    apt-get -y --purge remove \"$@\"
-}
-
 
 # Function to install all the dependencies including packages and server keys.
 setup_dependencies() {
@@ -615,76 +611,76 @@ remove_qbittorrent_nox() {
     task_info "${app_name} deleted.\n"
 }
 
+
 ###############################################################################
-#  NZBGet – headless Usenet downloader (runs as a service like qBittorrent)  #
-#########################setup_nzbget() {
+#  NZBGet - headless Usenet downloader (runs as a service like qBittorrent)  #
+###############################################################################
+setup_nzbget() {
     date_stamp="$(date '+%Y-%m-%d %H:%M')"
     app_name="nzbget"
-    app_user="${app_name}"
+    app_user="$app_name"
     app_group="media"
-    app_lib_path="/var/lib/${app_name}"
+    app_lib_path="/var/lib/$app_name"
 
-    task_info "Commencing install for ${app_name}…"
+    task_info "Commencing install for $app_name..."
 
-    # Create service user and ensure group memberships
-    task_start "Adding ${app_user} service user…"
-    if id "${app_user}" >/dev/null 2>&1; then
-        task_pass "User account for ${app_user} already exists."
+    # -- service user & group ------------------------------------------------
+    task_start "Adding $app_user service user..."
+    if id "$app_user" >/dev/null 2>&1; then
+        task_pass "User account for $app_user already exists."
     else
-        useradd -s /usr/sbin/nologin -d \"${app_lib_path}\" -r -m -U \"${app_user}\"
+        useradd -r -m -U -s /usr/sbin/nologin -d "$app_lib_path" "$app_user"
         check_result
     fi
 
-    task_start \"Adding ${app_group} service group…\"
-    getent group \"${app_group}\" >/dev/null 2>&1 || groupadd \"${app_group}\"
+    task_start "Adding $app_group group..."
+    getent group "$app_group" >/dev/null 2>&1 || groupadd "$app_group"
     check_result
 
-    task_start \"Adding ${app_user} to ${app_group}…\"
-    id \"${app_user}\" | grep -qE \"\\b${app_group}\\b\" || usermod -a -G \"${app_group}\" \"${app_user}\"
-    check_result
+    for u in "$app_user" "${SUDO_USER:-$USER}"; do
+        task_start "Adding $u to $app_group..."
+        id "$u" | grep -q "$app_group" || usermod -a -G "$app_group" "$u"
+        check_result
+    done
 
-    actual_user=\"${SUDO_USER:-$USER}\"
-    task_start \"Adding ${actual_user} to ${app_group}…\"
-    id \"${actual_user}\" | grep -qE \"\\b${app_group}\\b\" || usermod -a -G \"${app_group}\" \"${actual_user}\"
-    check_result
-
-    # Install package (or reinstall if binary missing)
-    task_info \"Installing ${app_name} package…\"
+    # -- package ------------------------------------------------------------
+    task_info "Installing $app_name package..."
     pkg_install nzbget
+
+    # If package is marked installed but binary missing, reinstall
     if ! command -v nzbget >/dev/null 2>&1; then
-        task_warn \"${app_name} binary missing — forcing reinstall…\"
+        task_warn "Binary missing - forcing reinstall..."
         apt-get -y --reinstall install nzbget
     fi
 
-    # Prepare configuration directory and default config
-    mkdir -p \"${app_lib_path}\"
-    if [ ! -f \"${app_lib_path}/nzbget.conf\" ]; then
+    # -- default config -----------------------------------------------------
+    mkdir -p "$app_lib_path"
+    if [ ! -f "$app_lib_path/nzbget.conf" ]; then
         if [ -f /etc/nzbget.conf ]; then
-            cp /etc/nzbget.conf \"${app_lib_path}/nzbget.conf\"
+            cp /etc/nzbget.conf "$app_lib_path/nzbget.conf"
         else
-            gunzip -c /usr/share/doc/nzbget/examples/nzbget.conf.gz > \"${app_lib_path}/nzbget.conf\"
+            gunzip -c /usr/share/doc/nzbget/examples/nzbget.conf.gz                 > "$app_lib_path/nzbget.conf"
         fi
     fi
-    chown -R \"${app_user}:${app_group}\" \"${app_lib_path}\"
+    chown -R "$app_user:$app_group" "$app_lib_path"
 
-    # Discover binary path
-    nzb_bin=\"$(command -v nzbget || echo /usr/bin/nzbget)\"
+    # -- systemd unit -------------------------------------------------------
+    nzb_bin="$(command -v nzbget || echo /usr/bin/nzbget)"
 
-    # Systemd service
-    task_start \"Writing /etc/systemd/system/${app_name}.service…\"
-    tee /etc/systemd/system/\"${app_name}\".service >/dev/null <<EOF
-# Generated by PiJARR ${date_stamp}
+    task_start "Writing /etc/systemd/system/$app_name.service..."
+    cat >/etc/systemd/system/"$app_name".service <<EOF
+# Generated by PiJARR $date_stamp
 [Unit]
 Description=NZBGet Daemon
 After=network.target
 
 [Service]
-User=${app_user}
-Group=${app_group}
+User=$app_user
+Group=$app_group
 UMask=0002
 Type=forking
-ExecStart=${nzb_bin} -D -c ${app_lib_path}/nzbget.conf
-ExecStop=${nzb_bin} -Q
+ExecStart=$nzb_bin -D -c $app_lib_path/nzbget.conf
+ExecStop=$nzb_bin -Q
 Restart=on-failure
 RestartSec=5
 
@@ -694,30 +690,30 @@ EOF
     check_result
 
     systemctl daemon-reload
-    systemctl enable \"${app_name}\"
-    systemctl start \"${app_name}\"
-    check_service \"${app_name}\"
-    task_info \"Completed install for ${app_name}\"
-    task_info \"Default NZBGet web UI → http://hostip:6789  (user: nzbget | pass: tegbzn6789)\"
+    systemctl enable "$app_name"
+    systemctl start  "$app_name"
+    check_service    "$app_name"
+
+    task_info "Completed install for $app_name"
+    task_info "Default NZBGet web UI → http://hostip:6789  (user: nzbget | pass: tegbzn6789)"
 }
 
 remove_nzbget() {
-    app_name=\"nzbget\"
-    app_lib_path=\"/var/lib/${app_name}\"
+    app_name="nzbget"
+    app_lib_path="/var/lib/$app_name"
 
-    task_warn \"You are about to delete all settings and files for ${app_name}…\"
+    task_warn "You are about to delete all settings and files for $app_name..."
     check_continue
 
-    systemctl stop \"${app_name}\" 2>/dev/null
-    rm -f /etc/systemd/system/\"${app_name}\".service
+    systemctl stop "$app_name" 2>/dev/null
+    rm -f /etc/systemd/system/"$app_name".service
     systemctl daemon-reload
-    pkg_purge nzbget
-    deluser --remove-home \"${app_name}\" 2>/dev/null
-    rm -rf \"${app_lib_path}\"
-    task_info \"${app_name} deleted.\"
-}app_lib_path}"
-    task_info "${app_name} deleted."
+    apt-get -y --purge remove nzbget
+    deluser "$app_name" 2>/dev/null
+    rm -rf "$app_lib_path"
+    task_info "$app_name deleted."
 }
+
 
 active_services() {
     task_info "Active Services"
