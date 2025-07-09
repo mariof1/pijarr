@@ -5,6 +5,13 @@ clear
 
 TEMPDIR="/tmp/pijarr"
 APPLIST="jackett sonarr lidarr radarr readarr prowlarr bazarr qbittorrent-nox nzbget"
+SERVICE_USER="media"
+
+# Ensure the common service user exists once
+if ! id "${SERVICE_USER}" >/dev/null 2>&1; then
+    useradd -s /usr/sbin/nologin -d "/var/lib/${SERVICE_USER}" -r -m -U "${SERVICE_USER}"
+fi
+
 
 # Set terminal global variable for colors if supported.
 if [ -t 1 ]; then
@@ -346,7 +353,7 @@ setup_app() {
         else
             file_extension="tar.gz"
         fi
-        app_user="${app_name}"
+        app_user="${SERVICE_USER}"
         app_group="media"
         src_url=${app_name}\_src_url
         src_url=$(eval echo \$"$src_url")
@@ -497,7 +504,9 @@ remove_app() {
         rm "/etc/systemd/system/${app}.service"* 2>/dev/null
         task_pass
         task_info "Removing ${app} service user account..."
-        deluser "${app}" 2>/dev/null
+        if [ "${SERVICE_USER}" != "${app}" ]; then
+            deluser "${app}" 2>/dev/null
+        fi
         task_start "Reloading systemctl daemon..."
         systemctl daemon-reload 2>/dev/null
         task_pass
@@ -508,7 +517,7 @@ remove_app() {
 setup_qbittorrent_nox() {
     date_stamp="$(date '+%Y-%m-%d %H%M')"
     app_name="qbittorrent-nox"
-    app_user="${app_name}"
+    app_user="${SERVICE_USER}"
     app_lib_path="/var/lib/${app_name}"
     app_group="media"
     task_info "Commencing install for ${app_name}..."
@@ -600,7 +609,9 @@ remove_qbittorrent_nox() {
     task_pass
     pkg_remove qbittorrent-nox
     task_info "Removing ${app} service user account..."
-    deluser "${app_name}" 2>/dev/null
+    if [ "${SERVICE_USER}" != "${app}" ]; then
+        deluser "${app}" 2>/dev/null
+    fi
     task_start "Removing ${app_lib_path}..."
     if [ "${app_lib_path}" != "/var/lib" ] && [ "${app_lib_path}" != "/var/lib/" ]; then
         rm -rf "${app_lib_path}" 2>/dev/null
@@ -618,7 +629,7 @@ remove_qbittorrent_nox() {
 setup_nzbget() {
     date_stamp="$(date '+%Y-%m-%d %H:%M')"
     app_name="nzbget"
-    app_user="$app_name"
+    app_user="${SERVICE_USER}"
     app_group="media"
     app_lib_path="/var/lib/$app_name"
 
@@ -717,7 +728,9 @@ remove_nzbget() {
     rm -f /etc/systemd/system/"$app_name".service
     systemctl daemon-reload
     apt-get -y --purge remove nzbget
-    deluser "$app_name" 2>/dev/null
+    if [ "${SERVICE_USER}" != "${app}" ]; then
+        deluser "${app}" 2>/dev/null
+    fi
     rm -rf "$app_lib_path"
     task_info "$app_name deleted."
 }
