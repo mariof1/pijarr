@@ -645,13 +645,17 @@ setup_nzbget() {
     task_info "Installing ${app_name} package…"
     pkg_install nzbget
 
-    # Copy default config into writable area
     mkdir -p "${app_lib_path}"
     if [ ! -f "${app_lib_path}/nzbget.conf" ]; then
-        cp /usr/share/nzbget/nzbget.conf "${app_lib_path}/"
+        if [ -f /etc/nzbget.conf ]; then
+            cp /etc/nzbget.conf "${app_lib_path}/nzbget.conf"
+        else
+            gunzip -c /usr/share/doc/nzbget/examples/nzbget.conf.gz \
+                > "${app_lib_path}/nzbget.conf"
+        fi
     fi
     chown -R "${app_user}:${app_group}" "${app_lib_path}"
-
+    
     # Systemd service
     task_start "Writing /etc/systemd/system/${app_name}.service…"
     tee /etc/systemd/system/"${app_name}".service >/dev/null <<EOF
