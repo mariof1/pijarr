@@ -751,7 +751,7 @@ display_menu() {
     printf "7.  Install prowlarr only\n"
     printf "8.  Install bazarr only\n"
     printf "\n9.  Install qbittorrent-nox (headless BitTorrent client)\n"
-    printf "\n10. Install nzbget (headless Usenet client)\n"
+    printf "10. Install nzbget (headless Usenet client)\n"
     printf "\n11. Remove ALL (jackett sonarr lidarr radarr readarr prowlarr bazarr)\n"
     printf "12. Remove jackett only\n"
     printf "13. Remove sonarr only\n"
@@ -767,7 +767,7 @@ display_menu() {
     printf "23. Show application source urls\n"
     printf "\n24. Exit\n"
     echo
-    printf "    Enter option [1-23]: "
+    printf "    Enter option [1-24]: "
 
     while :; do
         read choice
