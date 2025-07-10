@@ -61,11 +61,11 @@ task_info() {
 }
 
 task_warn() {
-    printf "\r[${CYAN}WARN${RESET}] ${1}$(tput el)\n"
+    printf "\r[${YELLOW}WARN${RESET}] ${1}$(tput el)\n"
 }
 
 task_dbug() {
-    printf "\r[${YELLOW}DBUG${RESET}] ${1}$(tput el)\n"
+    printf "\r[${MAGENTA}DBUG${RESET}] ${1}$(tput el)\n"
 }
 
 title_case() {
@@ -722,6 +722,59 @@ remove_nzbget() {
     task_info "$app_name deleted."
 }
 
+upgrade_apps() {
+    clear
+    task_info "Upgrading all applications..."
+    
+    # Update package list first
+    task_info "Updating package list..."
+    apt update
+    
+    # Upgrade applications installed via apt
+    task_info "Upgrading apt packages..."
+    for app in qbittorrent-nox nzbget; do
+        if dpkg -l | grep -q "^ii  $app "; then
+            task_info "Upgrading $app..."
+            apt install --only-upgrade -y "$app"
+            # Restart service if active
+            if systemctl is-active --quiet "$app"; then
+                task_info "Restarting $app service..."
+                systemctl restart "$app"
+            fi
+        else
+            task_skip "$app is not installed via apt. Skipping upgrade."
+        fi
+    done
+    
+    # Upgrade GitHub applications
+    for app in jackett sonarr lidarr radarr readarr prowlarr bazarr; do
+        if [ -f "/etc/systemd/system/${app}.service" ]; then
+            task_info "Upgrading $app from GitHub release..."
+            
+            # Stop service
+            if systemctl is-active --quiet "$app"; then
+                task_start "Stopping $app service..."
+                systemctl stop "$app"
+                check_result
+            fi
+            
+            # Remove existing installation
+            app_opt_path="/opt/$(title_case "$app")"
+            if [ -d "$app_opt_path" ]; then
+                task_start "Removing existing files for $app..."
+                rm -rf "$app_opt_path"
+                check_result
+            fi
+            
+            # Reinstall from GitHub
+            setup_app "$app"
+        else
+            task_skip "$app is not installed. Skipping upgrade."
+        fi
+    done
+    
+    task_info "All upgrades completed."
+}
 
 active_services() {
     task_info "Active Services"
@@ -785,9 +838,10 @@ display_menu() {
     printf "\n21. Show active services\n"
     printf "22. Show application default ports\n"
     printf "23. Show application source urls\n"
-    printf "\n24. Exit\n"
+    printf "24. Upgrade all applications\n"
+    printf "\n25. Exit\n"
     echo
-    printf "    Enter option [1-24]: "
+    printf "    Enter option [1-25]: "
 
     while :; do
         read choice
@@ -865,6 +919,9 @@ display_menu() {
             check_sources
             ;;
         24)
+            upgrade_apps
+            ;;
+        25)
             printf "\nExiting...\n"
             exit
             ;;
@@ -886,7 +943,6 @@ main() {
     check_superuser
     check_continue
     pkg_updates
-    check_status
     display_menu
 }
 
