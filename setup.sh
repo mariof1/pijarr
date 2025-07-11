@@ -725,11 +725,11 @@ remove_nzbget() {
 upgrade_apps() {
     clear
     task_info "Upgrading all applications..."
-
+    
     # Update package list first
     task_info "Updating package list..."
     apt update
-
+    
     # Upgrade applications installed via apt
     task_info "Upgrading apt packages..."
     for app in qbittorrent-nox nzbget; do
@@ -745,59 +745,47 @@ upgrade_apps() {
             task_skip "$app is not installed via apt. Skipping upgrade."
         fi
     done
-
+    
     # Upgrade GitHub applications
     for app in jackett sonarr lidarr radarr readarr prowlarr bazarr; do
         if [ -f "/etc/systemd/system/${app}.service" ]; then
             task_info "Upgrading $app from GitHub release..."
-
+            
             # Stop service
             if systemctl is-active --quiet "$app"; then
                 task_start "Stopping $app service..."
                 systemctl stop "$app"
                 check_result
             fi
-
-            # Preserve Bazarr configuration before removing files
-            temp_config_path=""
-            if [ "$app" = "bazarr" ]; then
-                app_opt_path="/opt/$(title_case "$app")"
-                if [ -d "${app_opt_path}/config" ]; then
-                    task_start "Backing up Bazarr configuration..."
-                    temp_config_path="$(mktemp -d)"
-                    cp -a "${app_opt_path}/config" "${temp_config_path}/" 2>/dev/null
-                    check_result
-                fi
-            fi
-
-            # Remove existing installation directory (application binaries only)
+            
+            # Remove existing installation
             app_opt_path="/opt/$(title_case "$app")"
             if [ -d "$app_opt_path" ]; then
                 task_start "Removing existing files for $app..."
-                rm -rf "$app_opt_path"
+                # Backup Bazarr data directory before removal
+if [ "$app" = "bazarr" ] && [ -d "$app_opt_path/data" ]; then
+    task_start "Backing up Bazarr data directory..."
+    cp -a "$app_opt_path/data" "$TEMPDIR/bazarr_data_backup"
+    check_result
+fi
+rm -rf "$app_opt_path"
                 check_result
             fi
-
+            
             # Reinstall from GitHub
             setup_app "$app"
+# Restore Bazarr data directory after reinstall
+if [ "$app" = "bazarr" ] && [ -d "$TEMPDIR/bazarr_data_backup" ]; then
+    task_start "Restoring Bazarr data directory..."
+    cp -a "$TEMPDIR/bazarr_data_backup" "$app_opt_path/"
+    check_result
+fi
 
-            # Restore Bazarr configuration after reinstall
-            if [ "$app" = "bazarr" ] && [ -n "$temp_config_path" ] && [ -d "${temp_config_path}/config" ]; then
-                task_start "Restoring Bazarr configuration..."
-                cp -a "${temp_config_path}/config" "${app_opt_path}/" 2>/dev/null
-                check_result
-                chown -R bazarr:media "${app_opt_path}/config"
-                rm -rf "${temp_config_path}"
-
-                task_start "Restarting Bazarr service..."
-                systemctl restart bazarr
-                check_result
-            fi
         else
             task_skip "$app is not installed. Skipping upgrade."
         fi
     done
-
+    
     task_info "All upgrades completed."
 }
 
