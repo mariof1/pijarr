@@ -762,6 +762,10 @@ upgrade_apps() {
             app_opt_path="/opt/$(title_case "$app")"
             if [ -d "$app_opt_path" ]; then
                 task_start "Removing existing files for $app..."
+                # Backup Bazarr data directory before removal
+if [ "$app" = "bazarr" ] && [ -d "$app_opt_path/data" ]; then
+    task_start "Backing up Bazarr data directory..."
+    cp -a "$app_opt_path/data" "$TEMPDIR/bazarr_data_backup"
     check_result
 fi
 rm -rf "$app_opt_path"
@@ -770,6 +774,10 @@ rm -rf "$app_opt_path"
             
             # Reinstall from GitHub
             setup_app "$app"
+# Restore Bazarr data directory after reinstall
+if [ "$app" = "bazarr" ] && [ -d "$TEMPDIR/bazarr_data_backup" ]; then
+    task_start "Restoring Bazarr data directory..."
+    cp -a "$TEMPDIR/bazarr_data_backup" "$app_opt_path/"
     check_result
 fi
 
